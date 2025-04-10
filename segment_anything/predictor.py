@@ -35,6 +35,8 @@ class SamPredictor:
         self,
         image: np.ndarray,
         image_format: str = "RGB",
+        features: torch.Tensor = None,
+        from_radio: bool = False,
     ) -> None:
         """
         Calculates the image embeddings for the provided image, allowing
@@ -57,13 +59,15 @@ class SamPredictor:
         input_image_torch = torch.as_tensor(input_image, device=self.device)
         input_image_torch = input_image_torch.permute(2, 0, 1).contiguous()[None, :, :, :]
 
-        self.set_torch_image(input_image_torch, image.shape[:2])
+        self.set_torch_image(input_image_torch, image.shape[:2], features=features, from_radio=from_radio)
 
     @torch.no_grad()
     def set_torch_image(
         self,
         transformed_image: torch.Tensor,
         original_image_size: Tuple[int, ...],
+        features: torch.Tensor = None,
+        from_radio: bool = False,
     ) -> None:
         """
         Calculates the image embeddings for the provided image, allowing
@@ -86,7 +90,18 @@ class SamPredictor:
         self.original_size = original_image_size
         self.input_size = tuple(transformed_image.shape[-2:])
         input_image = self.model.preprocess(transformed_image)
-        self.features = self.model.image_encoder(input_image)
+
+        if features is None:
+            self.features = self.model.image_encoder(input_image)
+        else:
+            if not from_radio:
+              print("Using locally loaded features!")
+              self.features = features
+            else:
+              print("Using RADIO loaded features!")
+              self.features = self.model.image_encoder.neck(features)
+
+              #self.features = features.to(self.device)
         self.is_image_set = True
 
     def predict(
