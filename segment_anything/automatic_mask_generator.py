@@ -134,7 +134,7 @@ class SamAutomaticMaskGenerator:
         self.output_mode = output_mode
 
     @torch.no_grad()
-    def generate(self, image: np.ndarray) -> List[Dict[str, Any]]:
+    def generate(self, image: np.ndarray, features: torch.Tensor = None, from_radio: bool = False) -> List[Dict[str, Any]]:
         """
         Generates masks for the given image.
 
@@ -160,7 +160,7 @@ class SamAutomaticMaskGenerator:
         """
 
         # Generate masks
-        mask_data = self._generate_masks(image)
+        mask_data = self._generate_masks(image, features=features, from_radio=from_radio)
 
         # Filter small disconnected regions and holes in masks
         if self.min_mask_region_area > 0:
@@ -194,7 +194,7 @@ class SamAutomaticMaskGenerator:
 
         return curr_anns
 
-    def _generate_masks(self, image: np.ndarray) -> MaskData:
+    def _generate_masks(self, image: np.ndarray, features: torch.Tensor = None, from_radio: bool = False) -> MaskData:
         orig_size = image.shape[:2]
         crop_boxes, layer_idxs = generate_crop_boxes(
             orig_size, self.crop_n_layers, self.crop_overlap_ratio
@@ -203,7 +203,7 @@ class SamAutomaticMaskGenerator:
         # Iterate over image crops
         data = MaskData()
         for crop_box, layer_idx in zip(crop_boxes, layer_idxs):
-            crop_data = self._process_crop(image, crop_box, layer_idx, orig_size)
+            crop_data = self._process_crop(image, crop_box, layer_idx, orig_size, features=features, from_radio=from_radio)
             data.cat(crop_data)
 
         # Remove duplicate masks between crops
@@ -228,12 +228,14 @@ class SamAutomaticMaskGenerator:
         crop_box: List[int],
         crop_layer_idx: int,
         orig_size: Tuple[int, ...],
+        features: torch.Tensor = None,
+        from_radio: bool = False,
     ) -> MaskData:
         # Crop the image and calculate embeddings
         x0, y0, x1, y1 = crop_box
         cropped_im = image[y0:y1, x0:x1, :]
         cropped_im_size = cropped_im.shape[:2]
-        self.predictor.set_image(cropped_im)
+        self.predictor.set_image(cropped_im, features=features, from_radio=from_radio)
 
         # Get points for this crop
         points_scale = np.array(cropped_im_size)[None, ::-1]
